@@ -24,6 +24,8 @@ List<Subject> subjects = [
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
+  static bool _notificationShownThisSession = false;
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -31,6 +33,124 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String filter = "all";
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUpcomingTasks();
+  }
+
+  // ================= CHECK UPCOMING TASKS FOR NOTIFICATION =================
+
+  Future<void> _checkUpcomingTasks() async {
+    // ถ้าแสดง notification ไปแล้วในรอบนี้ → ไม่แสดงซ้ำ
+    if (HomePage._notificationShownThisSession) {
+      return;
+    }
+
+    if (!mounted) return;
+
+    try {
+      final allTasks = await _getUpcomingTasksFromFirebase();
+      
+      // ตรวจสอบงานที่ใกล้วันกำหนด (ภายใน 3 วันข้างหน้า)
+      final now = DateTime.now();
+      final threeDaysLater = now.add(const Duration(days: 3));
+      
+      final upcomingTasks = allTasks.where((task) {
+        if (task.dueDate == null) return false;
+        return task.dueDate!.isAfter(now) && task.dueDate!.isBefore(threeDaysLater);
+      }).toList();
+
+      // แสดง notification ถ้ามีงานใกล้วันกำหนด
+      if (upcomingTasks.isNotEmpty && mounted) {
+        HomePage._notificationShownThisSession = true;
+        _showUpcomingTasksAlert(upcomingTasks);
+      }
+    } catch (e) {
+      print('Error checking upcoming tasks: $e');
+    }
+  }
+
+  void _showUpcomingTasksAlert(List<Task> tasks) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // บังคับให้กด "รับทราบ"
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("⏰ แจ้งเตือนงาน", style: TextStyle(color: Colors.orange)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("งานต่อไปนี้กำลังจะมาถึง:"),
+                const SizedBox(height: 12),
+                ...tasks.map((task) {
+                  final daysLeft = task.dueDate!.difference(DateTime.now()).inDays;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            task.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "กำหนดส่ง: ${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year} ${task.dueDate!.hour}:${task.dueDate!.minute.toString().padLeft(2, '0')}",
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          if (daysLeft == 0)
+                            Text(
+                              "⚠️ วันนี้!",
+                              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                            )
+                          else if (daysLeft == 1)
+                            Text(
+                              "⚠️ พรุ่งนี้!",
+                              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                            )
+                          else
+                            Text(
+                              "⏳ อีก $daysLeft วัน",
+                              style: TextStyle(color: Colors.orange.shade700),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.pink,
+              ),
+              child: const Text(
+                "รับทราบ",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
   
    Future<List<Task>> _getUpcomingTasksFromFirebase() async {
     List<Task> allTasks = [];

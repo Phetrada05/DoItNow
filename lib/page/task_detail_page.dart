@@ -34,7 +34,21 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             child: const Text("ยกเลิก"),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
+              // ลบจาก Firebase
+              if (widget.subjectId != null && widget.taskDocId != null) {
+                try {
+                  await _firestore
+                      .collection('subjects')
+                      .doc(widget.subjectId)
+                      .collection('tasks')
+                      .doc(widget.taskDocId)
+                      .delete();
+                } catch (e) {
+                  print('Error deleting task: $e');
+                }
+              }
+
               Navigator.pop(context); // ปิด dialog
               Navigator.pop(context); // กลับหน้า subject
             },
@@ -81,12 +95,35 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             child: const Text("ยกเลิก"),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               setState(() {
                 widget.task.title = titleController.text;
                 widget.task.description =
                     descController.text;
               });
+
+              // บันทึกไปที่ Firebase
+              if (widget.subjectId != null && widget.taskDocId != null) {
+                try {
+                  await _firestore
+                      .collection('subjects')
+                      .doc(widget.subjectId)
+                      .collection('tasks')
+                      .doc(widget.taskDocId)
+                      .update({
+                    'title': titleController.text,
+                    'description': descController.text,
+                  });
+                } catch (e) {
+                  print('Error updating task: $e');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("เกิดข้อผิดพลาด: $e")),
+                    );
+                  }
+                }
+              }
+
               Navigator.pop(context);
             },
             child: const Text("บันทึก"),
