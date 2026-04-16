@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_model.dart';
+import '../services/app_language.dart';
+import '../services/firestore_user_scope.dart';
 
 class AllTaskListPage extends StatefulWidget {
   const AllTaskListPage({super.key});
@@ -10,8 +12,13 @@ class AllTaskListPage extends StatefulWidget {
 }
 
 class _AllTaskListPageState extends State<AllTaskListPage> {
-
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  String tr(String th, String en) => AppLanguage.instance.text(th, en);
+
+  Widget _buildEmptyState() {
+    return Center(child: Text(tr('ยังไม่มีงาน', 'No tasks yet')));
+  }
 
   Color getStatusColor(TaskStatus status) {
     switch (status) {
@@ -25,10 +32,13 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
   }
 
   Future<void> toggleComplete(
-      String subjectId, String taskDocId, TaskStatus currentStatus) async {
+    String subjectId,
+    String taskDocId,
+    TaskStatus currentStatus,
+  ) async {
     if (subjectId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("เกิดข้อผิดพลาด: ไม่พบ Subject ID")),
+        SnackBar(content: Text(tr('เกิดข้อผิดพลาด: ไม่พบ Subject ID', 'Error: Subject ID not found'))),
       );
       return;
     }
@@ -38,27 +48,29 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
         : TaskStatus.done;
 
     try {
-      await _firestore
-          .collection('subjects')
-          .doc(subjectId)
-          .collection('tasks')
-          .doc(taskDocId)
-          .update({'status': newStatus.name});
+      await FirestoreUserScope.taskDoc(
+        _firestore,
+        subjectId,
+        taskDocId,
+      ).update({'status': newStatus.name});
     } catch (e) {
       print('Error updating status: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("เกิดข้อผิดพลาด: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(tr('เกิดข้อผิดพลาด: $e', 'Error: $e'))));
       }
     }
   }
 
   void changeStatus(
-      String subjectId, String taskDocId, TaskStatus currentStatus) {
+    String subjectId,
+    String taskDocId,
+    TaskStatus currentStatus,
+  ) {
     if (subjectId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("เกิดข้อผิดพลาด: ไม่พบ Subject ID")),
+        SnackBar(content: Text(tr('เกิดข้อผิดพลาด: ไม่พบ Subject ID', 'Error: Subject ID not found'))),
       );
       return;
     }
@@ -73,19 +85,18 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
               title: const Text("TODO"),
               onTap: () async {
                 try {
-                  await _firestore
-                      .collection('subjects')
-                      .doc(subjectId)
-                      .collection('tasks')
-                      .doc(taskDocId)
-                      .update({'status': TaskStatus.todo.name});
+                  await FirestoreUserScope.taskDoc(
+                    _firestore,
+                    subjectId,
+                    taskDocId,
+                  ).update({'status': TaskStatus.todo.name});
                   Navigator.pop(context);
                 } catch (e) {
                   print('Error: $e');
                   Navigator.pop(context);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("เกิดข้อผิดพลาด: $e")),
+                      SnackBar(content: Text(tr('เกิดข้อผิดพลาด: $e', 'Error: $e'))),
                     );
                   }
                 }
@@ -95,19 +106,18 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
               title: const Text("DOING"),
               onTap: () async {
                 try {
-                  await _firestore
-                      .collection('subjects')
-                      .doc(subjectId)
-                      .collection('tasks')
-                      .doc(taskDocId)
-                      .update({'status': TaskStatus.doing.name});
+                  await FirestoreUserScope.taskDoc(
+                    _firestore,
+                    subjectId,
+                    taskDocId,
+                  ).update({'status': TaskStatus.doing.name});
                   Navigator.pop(context);
                 } catch (e) {
                   print('Error: $e');
                   Navigator.pop(context);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("เกิดข้อผิดพลาด: $e")),
+                      SnackBar(content: Text(tr('เกิดข้อผิดพลาด: $e', 'Error: $e'))),
                     );
                   }
                 }
@@ -117,19 +127,18 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
               title: const Text("DONE"),
               onTap: () async {
                 try {
-                  await _firestore
-                      .collection('subjects')
-                      .doc(subjectId)
-                      .collection('tasks')
-                      .doc(taskDocId)
-                      .update({'status': TaskStatus.done.name});
+                  await FirestoreUserScope.taskDoc(
+                    _firestore,
+                    subjectId,
+                    taskDocId,
+                  ).update({'status': TaskStatus.done.name});
                   Navigator.pop(context);
                 } catch (e) {
                   print('Error: $e');
                   Navigator.pop(context);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("เกิดข้อผิดพลาด: $e")),
+                      SnackBar(content: Text(tr('เกิดข้อผิดพลาด: $e', 'Error: $e'))),
                     );
                   }
                 }
@@ -150,7 +159,9 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
     return Task(
       title: data['title'] ?? '',
       description: data['description'] ?? '',
-      dueDate: data['dueDate'] != null ? (data['dueDate'] as Timestamp).toDate() : null,
+      dueDate: data['dueDate'] != null
+          ? (data['dueDate'] as Timestamp).toDate()
+          : null,
       status: _parseStatus(data['status'] ?? 'todo'),
     );
   }
@@ -164,28 +175,52 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
 
   @override
   Widget build(BuildContext context) {
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F4),
-      appBar: AppBar(
-        title: const Text("All Tasks"),
-        backgroundColor: Colors.pink,
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore.collectionGroup('tasks').snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
+    return AnimatedBuilder(
+      animation: AppLanguage.instance,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF4F4F4),
+          appBar: AppBar(
+            title: Text(tr('งานทั้งหมด', 'All Tasks')),
+            backgroundColor: Colors.pink,
+          ),
+          body: StreamBuilder<QuerySnapshot>(
+            stream: _firestore.collectionGroup('tasks').snapshots(),
+            builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('${tr('เกิดข้อผิดพลาดในการโหลดงาน', 'Failed to load tasks')}: ${snapshot.error}'),
             );
           }
 
-          final taskDocs = snapshot.data!.docs;
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData) {
+            return _buildEmptyState();
+          }
+
+          final currentUid = FirestoreUserScope.requireUid();
+          final taskDocs = snapshot.data!.docs.where((doc) {
+            final rawData = doc.data();
+            String? userIdInDoc;
+            if (rawData is Map<String, dynamic>) {
+              userIdInDoc = rawData['userId']?.toString();
+            }
+
+            // Expected path: users/{uid}/subjects/{subjectId}/tasks/{taskId}
+            final segments = doc.reference.path.split('/');
+            final isCurrentUserPath =
+                segments.length >= 2 &&
+                segments[0] == 'users' &&
+                segments[1] == currentUid;
+
+            return isCurrentUserPath || userIdInDoc == currentUid;
+          }).toList();
 
           if (taskDocs.isEmpty) {
-            return const Center(
-              child: Text("ยังไม่มีงาน"),
-            );
+            return _buildEmptyState();
           }
 
           return ListView.builder(
@@ -196,8 +231,8 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
               final taskDocId = taskDoc.id;
               final taskData = taskDoc.data() as Map<String, dynamic>;
               final task = _mapToTask(taskData);
-              
-              // ดึง subjectId จาก path: subjects/{subjectId}/tasks/{taskDocId}
+
+              // ดึง subjectId จาก path: users/{uid}/subjects/{subjectId}/tasks/{taskDocId}
               final subjectId = taskDoc.reference.parent.parent?.id ?? '';
 
               return Container(
@@ -213,11 +248,9 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
                     /// TITLE + STATUS + CHECK
                     Row(
                       children: [
-
                         /// ติ๊กเสร็จ
                         IconButton(
                           icon: Icon(
@@ -238,10 +271,9 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
                             task.title,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              decoration:
-                                  task.status == TaskStatus.done
-                                      ? TextDecoration.lineThrough
-                                      : null,
+                              decoration: task.status == TaskStatus.done
+                                  ? TextDecoration.lineThrough
+                                  : null,
                             ),
                           ),
                         ),
@@ -256,16 +288,15 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: getStatusColor(task.status)
-                                  .withOpacity(0.2),
-                              borderRadius:
-                                  BorderRadius.circular(12),
+                              color: getStatusColor(
+                                task.status,
+                              ).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               task.status.name.toUpperCase(),
                               style: TextStyle(
-                                color:
-                                    getStatusColor(task.status),
+                                color: getStatusColor(task.status),
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
                               ),
@@ -278,29 +309,24 @@ class _AllTaskListPageState extends State<AllTaskListPage> {
                     const SizedBox(height: 8),
 
                     /// Description
-                    Text(
-                      task.description.isEmpty
-                          ? "-"
-                          : task.description,
-                    ),
+                    Text(task.description.isEmpty ? "-" : task.description),
 
                     const SizedBox(height: 6),
 
                     /// Due date
                     Text(
-                      "Due: ${formatDate(task.dueDate)}",
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
+                      "${tr('กำหนดส่ง', 'Due')}: ${formatDate(task.dueDate)}",
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
               );
             },
           );
-        },
-      ),
+            },
+          ),
+        );
+      },
     );
   }
 }

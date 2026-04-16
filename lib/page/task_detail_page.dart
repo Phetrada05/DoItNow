@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_model.dart';
+import '../services/app_language.dart';
+import '../services/firestore_user_scope.dart';
 
 class TaskDetailPage extends StatefulWidget {
   final Task task;
@@ -21,29 +23,30 @@ class TaskDetailPage extends StatefulWidget {
 class _TaskDetailPageState extends State<TaskDetailPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  String tr(String th, String en) => AppLanguage.instance.text(th, en);
+
   // ================= DELETE =================
   void confirmDelete() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("ยืนยันการลบ"),
-        content: const Text("คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้?"),
+        title: Text(tr('ยืนยันการลบ', 'Confirm Delete')),
+        content: Text(tr('คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้?', 'Are you sure you want to delete this task?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("ยกเลิก"),
+            child: Text(tr('ยกเลิก', 'Cancel')),
           ),
           TextButton(
             onPressed: () async {
               // ลบจาก Firebase
               if (widget.subjectId != null && widget.taskDocId != null) {
                 try {
-                  await _firestore
-                      .collection('subjects')
-                      .doc(widget.subjectId)
-                      .collection('tasks')
-                      .doc(widget.taskDocId)
-                      .delete();
+                  await FirestoreUserScope.taskDoc(
+                    _firestore,
+                    widget.subjectId!,
+                    widget.taskDocId!,
+                  ).delete();
                 } catch (e) {
                   print('Error deleting task: $e');
                 }
@@ -52,10 +55,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
               Navigator.pop(context); // ปิด dialog
               Navigator.pop(context); // กลับหน้า subject
             },
-            child: const Text(
-              "ลบ",
-              style: TextStyle(color: Colors.red),
-            ),
+            child: Text(tr('ลบ', 'Delete'), style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -64,27 +64,23 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   // ================= EDIT =================
   void showEditDialog() {
-    final titleController =
-        TextEditingController(text: widget.task.title);
-    final descController =
-        TextEditingController(text: widget.task.description);
+    final titleController = TextEditingController(text: widget.task.title);
+    final descController = TextEditingController(text: widget.task.description);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("แก้ไขงาน"),
+        title: Text(tr('แก้ไขงาน', 'Edit Task')),
         content: SingleChildScrollView(
           child: Column(
             children: [
               TextField(
                 controller: titleController,
-                decoration:
-                    const InputDecoration(labelText: "ชื่องาน"),
+                decoration: InputDecoration(labelText: tr('ชื่องาน', 'Task title')),
               ),
               TextField(
                 controller: descController,
-                decoration:
-                    const InputDecoration(labelText: "รายละเอียด"),
+                decoration: InputDecoration(labelText: tr('รายละเอียด', 'Description')),
               ),
             ],
           ),
@@ -92,25 +88,23 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("ยกเลิก"),
+            child: Text(tr('ยกเลิก', 'Cancel')),
           ),
           TextButton(
             onPressed: () async {
               setState(() {
                 widget.task.title = titleController.text;
-                widget.task.description =
-                    descController.text;
+                widget.task.description = descController.text;
               });
 
               // บันทึกไปที่ Firebase
               if (widget.subjectId != null && widget.taskDocId != null) {
                 try {
-                  await _firestore
-                      .collection('subjects')
-                      .doc(widget.subjectId)
-                      .collection('tasks')
-                      .doc(widget.taskDocId)
-                      .update({
+                  await FirestoreUserScope.taskDoc(
+                    _firestore,
+                    widget.subjectId!,
+                    widget.taskDocId!,
+                  ).update({
                     'title': titleController.text,
                     'description': descController.text,
                   });
@@ -118,7 +112,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                   print('Error updating task: $e');
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("เกิดข้อผิดพลาด: $e")),
+                      SnackBar(content: Text(tr('เกิดข้อผิดพลาด: $e', 'Error: $e'))),
                     );
                   }
                 }
@@ -126,7 +120,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
               Navigator.pop(context);
             },
-            child: const Text("บันทึก"),
+            child: Text(tr('บันทึก', 'Save')),
           ),
         ],
       ),
@@ -148,7 +142,9 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       if (!mounted) return;
       final pickedTime = await showTimePicker(
         context: context,
-        initialTime: TimeOfDay.fromDateTime(widget.task.dueDate ?? DateTime.now()),
+        initialTime: TimeOfDay.fromDateTime(
+          widget.task.dueDate ?? DateTime.now(),
+        ),
       );
 
       if (pickedTime != null) {
@@ -167,12 +163,11 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
         // บันทึกไปที่ Firebase
         if (widget.subjectId != null && widget.taskDocId != null) {
           try {
-            await _firestore
-                .collection('subjects')
-                .doc(widget.subjectId)
-                .collection('tasks')
-                .doc(widget.taskDocId)
-                .update({'dueDate': newDateTime});
+            await FirestoreUserScope.taskDoc(
+              _firestore,
+              widget.subjectId!,
+              widget.taskDocId!,
+            ).update({'dueDate': newDateTime});
           } catch (e) {
             print('Error updating due date: $e');
           }
@@ -201,44 +196,34 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   Widget build(BuildContext context) {
     final task = widget.task;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("รายละเอียดงาน"),
-        backgroundColor: Colors.pink,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: showEditDialog,
+    return AnimatedBuilder(
+      animation: AppLanguage.instance,
+      builder: (context, _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(tr('รายละเอียดงาน', 'Task Details')),
+            backgroundColor: Colors.pink,
+            actions: [
+              IconButton(icon: const Icon(Icons.edit), onPressed: showEditDialog),
+              IconButton(icon: const Icon(Icons.delete), onPressed: confirmDelete),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: confirmDelete,
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-
+          body: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             /// TITLE
             Text(
               task.title,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
 
             const SizedBox(height: 10),
 
             /// STATUS BADGE
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: getStatusColor(task.status).withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
@@ -255,9 +240,9 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             const SizedBox(height: 25),
 
             /// DESCRIPTION
-            const Text(
-              "รายละเอียด",
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Text(
+              tr('รายละเอียด', 'Description'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 5),
             Text(task.description.isEmpty ? "-" : task.description),
@@ -265,9 +250,9 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             const SizedBox(height: 25),
 
             /// DUE DATE
-            const Text(
-              "กำหนดส่ง",
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Text(
+              tr('กำหนดส่ง', 'Due Date'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 5),
             Row(
@@ -282,13 +267,15 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                 ),
                 ElevatedButton(
                   onPressed: changeDate,
-                  child: const Text("แก้ไข"),
+                  child: Text(tr('แก้ไข', 'Edit')),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
